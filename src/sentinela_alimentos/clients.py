@@ -78,14 +78,25 @@ class ComprasGovClient(PublicApiClient):
             params,
         )
 
-    def prices_for_catalog_item(self, catalog_item_code: int) -> list[dict[str, Any]]:
+    def prices_for_catalog_item(
+        self,
+        catalog_item_code: int,
+        *,
+        state: str | None = None,
+        municipality_code: str | None = None,
+    ) -> list[dict[str, Any]]:
+        params: dict[str, str | int] = {
+            "pagina": 1,
+            "tamanhoPagina": 50,
+            "tipo": "codigoItemCatalogo",
+            "codigo": catalog_item_code,
+        }
+        if state:
+            params["estado"] = state
+        if municipality_code:
+            params["codigoMunicipio"] = municipality_code
         return self.practiced_material_prices(
-            {
-                "pagina": 1,
-                "tamanhoPagina": 50,
-                "tipo": "codigoItemCatalogo",
-                "codigo": catalog_item_code,
-            }
+            params
         )
 
 

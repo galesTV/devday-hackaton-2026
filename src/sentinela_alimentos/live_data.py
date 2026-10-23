@@ -2,6 +2,7 @@
 
 import os
 from datetime import date
+from pathlib import Path
 
 import httpx
 
@@ -48,7 +49,22 @@ def food_class_for(query: str) -> int | None:
     return None
 
 
-def pncp_food_movements(start: date, end: date, max_purchases: int = 10) -> list[FoodMovement]:
+def transparency_api_key() -> str:
+    """Read the key from the environment or a local .env file without logging it."""
+    if key := os.getenv("TRANSPARENCIA_API_KEY"):
+        return key
+    env_file = Path(".env")
+    if env_file.is_file():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            name, separator, value = line.partition("=")
+            if name.strip() == "TRANSPARENCIA_API_KEY" and separator:
+                return value.strip().strip('"').strip("'")
+    return ""
+
+
+def pncp_food_movements(
+    start: date, end: date, query: str | None = None, max_purchases: int = 10
+) -> list[FoodMovement]:
     """PNCP does not expose a keyword filter; filter publication objects locally."""
     client = PNCPClient()
     try:
@@ -89,6 +105,10 @@ def pncp_food_movements(start: date, end: date, max_purchases: int = 10) -> list
                         unit_price=None,
                         total_value=decimal(purchase.get("valorTotalHomologado"))
                         or decimal(purchase.get("valorTotalEstimado")),
+                        municipality_code=str(
+                            (purchase.get("unidadeOrgao") or {}).get("codigoIbge") or ""
+                        )
+                        or None,
                         source_url="https://pncp.gov.br/app/editais/"
                         + purchase["numeroControlePNCP"],
                         raw={"purchase": purchase},
@@ -97,7 +117,9 @@ def pncp_food_movements(start: date, end: date, max_purchases: int = 10) -> list
                 continue
             for item in items:
                 description = item.get("descricao") or item.get("descricaoItem")
-                if not is_food(description):
+                if not is_food(description) or (
+                    query and normalized_text(query) not in normalized_text(description)
+                ):
                     continue
                 quantity = decimal(item.get("quantidade"))
                 unit_price = decimal(
@@ -121,6 +143,10 @@ def pncp_food_movements(start: date, end: date, max_purchases: int = 10) -> list
                         unit_price=unit_price,
                         total_value=decimal(item.get("valorTotalHomologado"))
                         or (quantity * unit_price if quantity and unit_price else None),
+                        municipality_code=str(
+                            (purchase.get("unidadeOrgao") or {}).get("codigoIbge") or ""
+                        )
+                        or None,
                         source_url="https://pncp.gov.br/app/editais/" + purchase["numeroControlePNCP"],
                         raw={"purchase": purchase, "item": item},
                     )
@@ -161,9 +187,71 @@ def compras_food_catalog(query: str) -> list[FoodMovement]:
         client.close()
 
 
+def compras_regional_market_prices(
+    query: str, state: str | None, municipality_code: str | None
+) -> list[FoodMovement]:
+    """Fetch public price samples for the CATMAT food item in the purchase region."""
+    client = ComprasGovClient()
+    try:
+        catalog = client.food_catalog(class_code=food_class_for(query))
+        matches = [
+            item
+            for item in catalog
+            if normalized_text(query) in normalized_text(item.get("descricaoItem"))
+        ]
+        movements: list[FoodMovement] = []
+        for catalog_item in matches[:3]:
+            records = client.prices_for_catalog_item(
+                catalog_item["codigoItem"],
+                state=state,
+                municipality_code=municipality_code,
+            )
+            if not records and municipality_code:
+                # Keep the geographic criterion, widening only from city to UF.
+                records = client.prices_for_catalog_item(
+                    catalog_item["codigoItem"], state=state
+                )
+            for record in records:
+                price = decimal(
+                    record.get("valorUnitario")
+                    or record.get("precoUnitario")
+                    or record.get("valorUnitarioHomologado")
+                )
+                if price is None:
+                    continue
+                movements.append(
+                    FoodMovement(
+                        id=f"compras-preco:{catalog_item['codigoItem']}:{record.get('idCompra') or len(movements)}",
+                        source=Source.COMPRAS_GOV,
+                        description=catalog_item.get("descricaoItem"),
+                        category=catalog_item.get("nomeClasse"),
+                        supplier_id=record.get("cnpjFornecedor"),
+                        supplier_name=record.get("nomeFornecedor"),
+                        buyer_name=record.get("nomeUasg") or record.get("nomeOrgao"),
+                        municipality=record.get("municipio"),
+                        state=record.get("uf") or state,
+                        event_date=iso_date(record.get("dataCompra")),
+                        quantity=decimal(record.get("quantidade")),
+                        unit=record.get("unidadeFornecimento"),
+                        unit_price=price,
+                        total_value=decimal(record.get("valorTotal")),
+                        municipality_code=str(record.get("codigoMunicipio") or municipality_code or "") or None,
+                        source_url="https://dadosabertos.compras.gov.br/swagger-ui/index.html",
+                        raw={"catalog": catalog_item, "price": record},
+                    )
+                )
+        return movements
+    finally:
+        client.close()
+
+
 def transparency_food_agreements(start: date, end: date) -> list[FoodMovement]:
     """The API has no food term filter: retrieve a period and filter the object locally."""
-    client = TransparencyClient(os.getenv("TRANSPARENCIA_API_KEY", ""))
+    if (end - start).days > 31:
+        raise ValueError(
+            "O Portal da Transparência aceita consulta de convênios por período de até 1 mês."
+        )
+    client = TransparencyClient(transparency_api_key())
     try:
         records = client.agreements(
             {

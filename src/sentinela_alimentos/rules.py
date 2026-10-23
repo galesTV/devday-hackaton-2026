@@ -10,6 +10,15 @@ from .normalization import normalized_text
 REQUIRED_FIELDS = {"descrição": "description", "fornecedor": "supplier_name", "valor total": "total_value"}
 
 
+def effective_unit_price(movement: FoodMovement) -> Decimal | None:
+    """Use the provided unit price or derive it only when quantity is known."""
+    if movement.unit_price is not None:
+        return movement.unit_price
+    if movement.total_value is not None and movement.quantity not in (None, Decimal(0)):
+        return movement.total_value / movement.quantity
+    return None
+
+
 def find_duplicate_movements(movements: list[FoodMovement]) -> list[Finding]:
     groups: dict[tuple[str, str, Decimal | None, object], list[FoodMovement]] = defaultdict(list)
     for movement in movements:
@@ -27,17 +36,58 @@ def find_duplicate_movements(movements: list[FoodMovement]) -> list[Finding]:
 def find_outlier_prices(movements: list[FoodMovement], multiplier: Decimal = Decimal("1.5")) -> list[Finding]:
     by_item: dict[tuple[str, str], list[FoodMovement]] = defaultdict(list)
     for movement in movements:
-        if movement.unit_price is not None and movement.unit_price > 0:
+        if (price := effective_unit_price(movement)) is not None and price > 0:
             by_item[(normalized_text(movement.description), normalized_text(movement.unit))].append(movement)
     findings: list[Finding] = []
     for group in by_item.values():
         if len(group) < 3:
             continue
-        reference = Decimal(str(median([item.unit_price for item in group if item.unit_price])))
+        reference = Decimal(str(median([effective_unit_price(item) for item in group])))
         threshold = reference * multiplier
         for item in group:
-            if item.unit_price and item.unit_price > threshold:
-                findings.append(Finding(item.id, "Valor fora do critério", f"Preço unitário R$ {item.unit_price:.2f} supera 1,5× a mediana comparável de R$ {reference:.2f}.", "média"))
+            price = effective_unit_price(item)
+            if price and price > threshold:
+                findings.append(Finding(item.id, "Valor fora do critério", f"Preço unitário R$ {price:.2f} supera 1,5× a mediana comparável de R$ {reference:.2f}.", "média"))
+    return findings
+
+
+def find_regional_price_discrepancies(
+    purchases: list[FoodMovement],
+    market_prices: list[FoodMovement],
+    multiplier: Decimal = Decimal("1.30"),
+) -> list[Finding]:
+    """Compare a purchase against same-city, then same-state public price samples."""
+    findings: list[Finding] = []
+    for purchase in purchases:
+        purchase_price = effective_unit_price(purchase)
+        if purchase_price is None or purchase_price <= 0:
+            continue
+        local = [
+            effective_unit_price(reference)
+            for reference in market_prices
+            if reference.municipality_code
+            and reference.municipality_code == purchase.municipality_code
+            and effective_unit_price(reference) is not None
+        ]
+        state = [
+            effective_unit_price(reference)
+            for reference in market_prices
+            if reference.state == purchase.state and effective_unit_price(reference) is not None
+        ]
+        samples = local or state
+        if not samples:
+            continue
+        reference_price = Decimal(str(median(samples)))
+        if purchase_price > reference_price * multiplier:
+            scope = "município" if local else "UF"
+            findings.append(
+                Finding(
+                    purchase.id,
+                    "Possível discrepância regional de preço",
+                    f"Preço unitário R$ {purchase_price:.2f} excede 30% da mediana de R$ {reference_price:.2f} em amostra pública da mesma {scope}. Requer conferência de especificação, frete e quantidade; não comprova desvio de verba.",
+                    "alta",
+                )
+            )
     return findings
 
 

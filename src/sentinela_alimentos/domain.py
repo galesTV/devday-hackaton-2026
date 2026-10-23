@@ -33,6 +33,7 @@ class FoodMovement:
     unit: str | None
     unit_price: Decimal | None
     total_value: Decimal | None
+    municipality_code: str | None = None
     source_url: str | None = None
     raw: dict = field(default_factory=dict, compare=False)
 
