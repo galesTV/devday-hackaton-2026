@@ -26,6 +26,32 @@ O modo demonstrativo usa seis registros fictícios (abaixo do limite de 100) e c
 
 Cada ocorrência possui explicação, origem e seletor **Pendente/Revisada**.
 
+## Critérios e formato dos alertas
+
+`run_all_rules(movements)` preserva a assinatura e retorna uma lista de `Finding`, associada ao registro original por `movement_id`. Além dos campos existentes (`rule`, `explanation`, `severity`), cada resultado inclui `rule_id`, `alert_type`, `criteria`, `evidence` e `limitations`. `alert_type` vale `alert` para sinal acionado ou `insufficient_evidence` quando uma comparação de preço não tem amostra adequada. A interface exibe o segundo como informação, e não como alerta.
+
+- **Duplicidade:** ID repetido no mesmo lote é tratado como duplicidade confirmada por identificador. Similaridade exige descrição, fornecedor, data, valor total, quantidade e unidade iguais; comprador, município e UF, quando presentes nos dois registros, também não podem divergir. Valor igual isoladamente nunca gera alerta. O resultado inclui os IDs e os campos coincidentes.
+- **Preço:** limite configurável por `multiplier`, padrão existente de `1.5` vezes a mediana. A comparação exige descrição, categoria, unidade e ano iguais e três ou mais referências válidas externas ao registro. Informa mediana, quantidade e IDs das referências, limiar e divergência percentual `(preço - mediana) / mediana × 100`. Não há conversão de unidades. Sem amostra mínima, retorna `insufficient_evidence`.
+- **Dados obrigatórios:** ID para rastreabilidade; descrição, fornecedor, data e valor total para duplicidade; descrição, categoria, unidade, data e preço unitário para comparar preços. Quantidade também integra a chave de similaridade. Campos opcionais como URL e localização ausentes não geram alerta por si só. Ausência/invalidade limita a análise e não implica fraude.
+
+Exemplo de campos adicionais do retorno:
+
+```python
+{
+    "movement_id": "pncp-003",
+    "rule_id": "price_outlier",
+    "rule": "Valor fora do critério",
+    "alert_type": "alert",
+    "criteria": {"multiplier": "1.5", "minimum_references": 3},
+    "evidence": {
+        "price": "18.00", "reference_median": "7.8",
+        "threshold": "11.70", "divergence_percent": "130.7",
+        "reference_count": 4, "reference_ids": ["..."]
+    },
+    "limitations": ["Comparação textual exata; não há conversão de unidade."]
+}
+```
+
 ## Executar
 
 ```powershell
