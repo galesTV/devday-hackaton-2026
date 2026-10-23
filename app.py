@@ -6,7 +6,7 @@ import streamlit as st
 from sentinela_alimentos.collection import collect_food_data
 from sentinela_alimentos.demo_data import sample_movements
 from sentinela_alimentos.reports import build_report, export_pdf
-from sentinela_alimentos.rules import find_regional_price_discrepancies, run_all_rules
+from sentinela_alimentos.rules import run_all_rules
 from sentinela_alimentos.session_state import public_movements, save_public_result
 
 st.set_page_config(page_title="Sentinela Alimentos", page_icon="🌾", layout="wide")
@@ -60,21 +60,32 @@ if mode == "Consultar fontes oficiais":
         else:
             st.info("Sem consulta carregada. Defina os filtros e clique em Buscar dados públicos.")
     else:
-        st.caption("Registros reais retornados pelas fontes oficiais; preços CATMAT são usados apenas como referência na regra regional.")
+        st.caption("Registros reais retornados pelas fontes oficiais; preços CATMAT podem compor referências comparáveis nas regras de preço.")
 
 findings = run_all_rules(movements)
-findings += find_regional_price_discrepancies(
-    [item for item in movements if item.source == "PNCP"],
-    [item for item in movements if item.source == "Compras.gov.br" and item.unit_price],
-)
 grouped = defaultdict(list)
 by_id = {item.id: item for item in movements if item.id}
 for finding in findings:
     grouped[finding.movement_id].append(finding)
 
+
+def status_key(item_id: str, source: str) -> str:
+    return f"{source}:{item_id}"
+
+
+def occurrence_status(item_id: str, source: str) -> str:
+    """Use the widget value first, so a click moves the occurrence on this rerun."""
+    key = status_key(item_id, source)
+    status = st.session_state.get(f"status-{key}")
+    if status not in {"Pendente", "Revisada"}:
+        status = st.session_state.review_status.get(key, "Pendente")
+    st.session_state.review_status[key] = status
+    return status
+
+
 total = sum(finding.alert_type == "alert" for finding in findings)
 reviewed = sum(
-    st.session_state.review_status.get(f"{item.source}:{item.id}") == "Revisada"
+    occurrence_status(item.id, str(item.source)) == "Revisada"
     for item in movements
     if item.id
 )
@@ -86,23 +97,38 @@ three.metric("Revisadas", reviewed)
 st.subheader("Ocorrências para revisão")
 if movements and not findings:
     st.success("Nenhuma ocorrência foi sinalizada pelas regras aplicadas aos registros retornados.")
-for movement_id, record_findings in grouped.items():
-    item = by_id.get(movement_id)
+
+
+def show_occurrence(item_id: str, record_findings: list) -> None:
+    item = by_id.get(item_id)
     if item is None:
         st.info("Registro sem identificador rastreável")
         for finding in record_findings:
             display = st.info if finding.alert_type == "insufficient_evidence" else st.warning
             display(f"**{finding.rule}** — {finding.explanation}")
-        continue
-    with st.expander(f"{movement_id} · {item.source} · {item.description or 'Descrição ausente'}", expanded=True):
+        return
+    review_key = status_key(item_id, str(item.source))
+    with st.expander(
+        f"{item_id} · {item.source} · {item.description or 'Descrição ausente'}",
+        expanded=True,
+    ):
         for finding in record_findings:
             display = st.info if finding.alert_type == "insufficient_evidence" else st.warning
             display(f"**{finding.rule}** — {finding.explanation}")
         c1, c2, c3 = st.columns(3)
-        c1.write(f"Valor: R$ {item.total_value:.2f}" if item.total_value is not None else "Valor: indisponível")
+        c1.write(
+            f"Valor: R$ {item.total_value:.2f}"
+            if item.total_value is not None
+            else "Valor: indisponível"
+        )
         c2.write(f"Fornecedor: {item.supplier_name or 'não informado'}")
-        review_key = f"{item.source}:{movement_id}"
-        status = c3.radio("Status", ["Pendente", "Revisada"], key=f"status-{review_key}", horizontal=True)
+        status = c3.radio(
+            "Status",
+            ["Pendente", "Revisada"],
+            index=1 if occurrence_status(item_id, str(item.source)) == "Revisada" else 0,
+            key=f"status-{review_key}",
+            horizontal=True,
+        )
         st.session_state.review_status[review_key] = status
         if item.source_url:
             st.link_button("Abrir registro ou fonte oficial", item.source_url)
@@ -110,10 +136,37 @@ for movement_id, record_findings in grouped.items():
         st.download_button(
             "Baixar relatório PDF",
             data=export_pdf(report),
-            file_name=f"sentinela-{item.source}-{movement_id}.pdf".replace("/", "-"),
+            file_name=f"sentinela-{item.source}-{item_id}.pdf".replace("/", "-"),
             mime="application/pdf",
             key=f"report-{review_key}",
         )
+
+
+pending_items = []
+reviewed_items = []
+unidentified_items = []
+for movement_id, record_findings in grouped.items():
+    item = by_id.get(movement_id)
+    if item is None:
+        unidentified_items.append((movement_id, record_findings))
+    elif occurrence_status(movement_id, str(item.source)) == "Revisada":
+        reviewed_items.append((movement_id, record_findings))
+    else:
+        pending_items.append((movement_id, record_findings))
+
+pending_tab, reviewed_tab = st.tabs(
+    [f"Pendentes ({len(pending_items) + len(unidentified_items)})", f"Revisadas ({len(reviewed_items)})"]
+)
+with pending_tab:
+    if not pending_items and not unidentified_items:
+        st.info("Não há ocorrências pendentes de revisão.")
+    for movement_id, record_findings in [*pending_items, *unidentified_items]:
+        show_occurrence(movement_id, record_findings)
+with reviewed_tab:
+    if not reviewed_items:
+        st.info("Nenhuma ocorrência foi marcada como revisada ainda.")
+    for movement_id, record_findings in reviewed_items:
+        show_occurrence(movement_id, record_findings)
 
 st.subheader("Como os dados se complementam")
 st.markdown("PNCP: contratação e itens · Compras.gov.br: CATMAT e preços praticados · Portal da Transparência: convênios, recursos e execução. A integração em tempo real requer filtros e, para Transparência, chave de API.")
