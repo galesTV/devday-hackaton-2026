@@ -1,13 +1,9 @@
 from collections import defaultdict
 from datetime import date, timedelta
-from hashlib import sha256
-import json
 from pathlib import Path
 
 import streamlit as st
 
-from sentinela_alimentos.ai_service import AIServiceError, analyze_records, build_factual_context
-from sentinela_alimentos.ai_service import is_configured as ai_is_configured
 from sentinela_alimentos.collection import collect_food_data
 from sentinela_alimentos.demo_data import sample_movements
 from sentinela_alimentos.reports import build_report, export_pdf
@@ -24,12 +20,6 @@ if "live_result" not in st.session_state:
     st.session_state.live_result = None
 if "live_search_completed" not in st.session_state:
     st.session_state.live_search_completed = False
-if "ai_cache" not in st.session_state:
-    st.session_state.ai_cache = {}
-if "ai_chat_history" not in st.session_state:
-    st.session_state.ai_chat_history = {}
-if "ai_report_summaries" not in st.session_state:
-    st.session_state.ai_report_summaries = {}
 
 with st.sidebar:
     st.markdown('<div class="brand-mark">🌿</div><div class="brand-name">Sentinela<br>Alimentos</div>', unsafe_allow_html=True)
