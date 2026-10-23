@@ -68,17 +68,24 @@ findings += find_regional_price_discrepancies(
     [item for item in movements if item.source == "Compras.gov.br" and item.unit_price],
 )
 grouped = defaultdict(list)
+by_id = {item.id: item for item in movements if item.id}
 for finding in findings:
     grouped[finding.movement_id].append(finding)
 
 total = sum(finding.alert_type == "alert" for finding in findings)
-reviewed = sum(status == "Revisada" for status in st.session_state.review_status.values())
+reviewed = sum(
+    st.session_state.review_status.get(f"{item.source}:{item.id}") == "Revisada"
+    for item in movements
+    if item.id
+)
 one, two, three = st.columns(3)
 one.metric("Registros demonstrados", len(movements))
 two.metric("Ocorrências sinalizadas", total)
 three.metric("Revisadas", reviewed)
 
 st.subheader("Ocorrências para revisão")
+if movements and not findings:
+    st.success("Nenhuma ocorrência foi sinalizada pelas regras aplicadas aos registros retornados.")
 for movement_id, record_findings in grouped.items():
     item = by_id.get(movement_id)
     if item is None:
@@ -92,10 +99,21 @@ for movement_id, record_findings in grouped.items():
             display = st.info if finding.alert_type == "insufficient_evidence" else st.warning
             display(f"**{finding.rule}** — {finding.explanation}")
         c1, c2, c3 = st.columns(3)
-        c1.write(f"Valor: R$ {item.total_value or 0:.2f}")
+        c1.write(f"Valor: R$ {item.total_value:.2f}" if item.total_value is not None else "Valor: indisponível")
         c2.write(f"Fornecedor: {item.supplier_name or 'não informado'}")
-        status = c3.radio("Status", ["Pendente", "Revisada"], key=f"status-{movement_id}", horizontal=True)
-        st.session_state.review_status[movement_id] = status
+        review_key = f"{item.source}:{movement_id}"
+        status = c3.radio("Status", ["Pendente", "Revisada"], key=f"status-{review_key}", horizontal=True)
+        st.session_state.review_status[review_key] = status
+        if item.source_url:
+            st.link_button("Abrir registro ou fonte oficial", item.source_url)
+        report = build_report(item, record_findings, simulated=is_demo)
+        st.download_button(
+            "Baixar relatório PDF",
+            data=export_pdf(report),
+            file_name=f"sentinela-{item.source}-{movement_id}.pdf".replace("/", "-"),
+            mime="application/pdf",
+            key=f"report-{review_key}",
+        )
 
 st.subheader("Como os dados se complementam")
 st.markdown("PNCP: contratação e itens · Compras.gov.br: CATMAT e preços praticados · Portal da Transparência: convênios, recursos e execução. A integração em tempo real requer filtros e, para Transparência, chave de API.")
