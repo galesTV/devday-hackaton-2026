@@ -8,6 +8,14 @@ MVP para o Dev Day: uma fila de revisão de movimentações de compras públicas
 
 O sistema sinaliza evidências para conferência humana, nunca uma conclusão automática de fraude.
 
+## Consultas reais às fontes
+
+Na barra lateral, selecione **Consultar APIs oficiais**. O sistema busca:
+
+- **PNCP**: publicações de pregão e, para objetos com termos alimentares, os respectivos itens. A API não possui busca textual para publicações, por isso o filtro ocorre localmente e é limitado a uma página de resultados.
+- **Compras.gov.br**: itens CATMAT do grupo **89 — Subsistência**, que inclui carnes, hortifrúti, cereais e laticínios. A busca por produto é feita nas descrições do catálogo; o endpoint de preços praticados requer `tipo=codigoItemCatalogo` ou `codigoPdm`.
+- **Portal da Transparência**: convênios no período, filtrados localmente pelo objeto. Defina `TRANSPARENCIA_API_KEY` antes de usar esta fonte, pois a API rejeita consultas sem chave.
+
 ## Demonstração pronta
 
 O modo demonstrativo usa seis registros fictícios (abaixo do limite de 100) e cobre os três critérios do desafio:
