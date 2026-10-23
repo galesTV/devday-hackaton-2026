@@ -196,6 +196,10 @@ def find_outlier_prices(
             and _valid_positive_decimal(item.unit_price)
         ):
             continue
+        # A repeated identifier makes it impossible to tie a price finding to
+        # one unambiguous source row. The duplicate rule reports that issue.
+        if id_counts[item.id] != 1:
+            continue
         peers = [
             candidate for candidate in movements
             if id_counts[candidate.id] == 1 and _comparable(item, candidate)

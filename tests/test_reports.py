@@ -44,6 +44,17 @@ def test_simulated_report_does_not_present_fixture_source_as_official():
     assert "fixture: PNCP" in report["text"]
 
 
+def test_ai_summary_is_separate_from_facts_and_marked_as_interpretation():
+    report = build_report(
+        sample_movements()[0], [], ai_summary="Interpretação gerada pelo modelo."
+    )
+
+    assert "## Evidências e origem" in report["text"]
+    assert "## Análise assistida por IA (interpretação, não evidência)" in report["text"]
+    assert report["text"].index("## Evidências e origem") < report["text"].index("## Análise assistida por IA")
+    assert "Interpretação gerada pelo modelo." in report["text"]
+
+
 def test_pdf_preserves_portuguese_text_and_paginates_long_reports():
     item = sample_movements()[0]
     report = build_report(item, [], observations="São informações para revisão cidadã. " * 200)

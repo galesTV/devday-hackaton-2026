@@ -12,6 +12,7 @@ def build_report(
     observations: str = "",
     *,
     simulated: bool = False,
+    ai_summary: str = "",
 ) -> dict[str, str]:
     """Build the preview from the exact movement and findings shown by the app."""
     generated = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M %Z")
@@ -40,6 +41,7 @@ def build_report(
         "", "## Possíveis explicações a verificar", "Diferenças de especificação, embalagem, qualidade, quantidade, frete, local e data podem explicar valores distintos. Confirme esses fatores nos documentos originais.",
         "", "## Limitações", "Este relatório depende dos campos disponibilizados pela fonte e das regras determinísticas do painel. Ausência de alerta não comprova regularidade; um alerta não comprova fraude ou superfaturamento.",
         "", "## Conclusão informativa", "O registro merece a revisão indicada acima, considerando as evidências e limitações descritas. Nenhuma denúncia foi enviada.",
+        *(["", "## Análise assistida por IA (interpretação, não evidência)", ai_summary.strip()] if ai_summary.strip() else []),
         "", "## Observações complementares do cidadão", observations.strip() or "(Nenhuma observação adicionada.)",
     ]
     text = "\n".join(lines)

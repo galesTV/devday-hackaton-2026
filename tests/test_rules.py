@@ -168,6 +168,14 @@ def test_repeated_reference_ids_do_not_inflate_sample_count(make_movement):
     assert result.evidence["reference_count"] == 1
 
 
+def test_repeated_target_id_is_not_used_for_price_analysis(make_movement):
+    rows = [make_movement("r1"), make_movement("r2"), make_movement("r3")]
+    rows.extend([make_movement("target", "100"), make_movement("target", "100")])
+
+    assert not [finding for finding in find_outlier_prices(rows)
+                if finding.movement_id == "target"]
+
+
 def test_multiplier_is_configurable_and_reported(make_movement):
     rows = [make_movement("r1", "10"), make_movement("r2", "10"),
             make_movement("r3", "10"), make_movement("target", "25")]

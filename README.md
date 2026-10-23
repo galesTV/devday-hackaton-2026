@@ -79,6 +79,19 @@ O cruzamento responsável usa: descrição/CATMAT e unidade para preço, CNPJ/no
 
 O trabalho desta entrega está na branch `feature/integracao-fontes-alimentos`, criada a partir de `develop`. Proposta de fluxo: `feature/*` → PR para `develop` → `release/*` para a demonstração → merge em `main` e tag da versão.
 
+## Análise explicativa com IA (opcional)
+
+A página **Análise com IA** usa a API oficial da OpenAI pelo SDK Python e pela Responses API. O modelo padrão é `gpt-6-luna`; pode ser alterado com `OPENAI_MODEL`. A IA só é chamada após uma análise ou pergunta explícita, recebe no máximo cinco registros selecionados e explica regras e evidências já calculadas pelo sistema. Ela não consulta a internet, cria referências de preço ou comprova irregularidades. A análise pode ser incluída nos PDFs como interpretação assistida por IA, separada dos fatos fornecidos.
+
+No Windows, copie `.env.example` para `.env` e preencha `OPENAI_API_KEY` com uma chave criada em <https://platform.openai.com/api-keys>. O `.env` já está no `.gitignore`; não coloque chaves no código, no repositório ou em prints/logs. Também é possível definir a variável só para a sessão do PowerShell:
+
+```powershell
+$env:OPENAI_API_KEY = "sua-chave-nova"
+streamlit run app.py
+```
+
+Instale as dependências com `pip install -e ".[dev]"`. Sem chave, o painel informa que a integração está pendente e não apresenta respostas simuladas. O uso da API pode gerar cobrança conforme a conta, o modelo e os tokens enviados.
+
 ## Fontes
 
 - [PNCP — API de consulta](https://pncp.gov.br/api/consulta/swagger-ui/index.html)
