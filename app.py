@@ -71,46 +71,31 @@ grouped = defaultdict(list)
 for finding in findings:
     grouped[finding.movement_id].append(finding)
 
-statuses = [st.session_state.review_status.get(f"{f.movement_id}|{f.rule}", "Pendente") for f in findings]
-cols = st.columns(4)
-cols[0].metric("Registros analisados", len(movements))
-cols[1].metric("Ocorrências", len(findings))
-cols[2].metric("Pendentes", statuses.count("Pendente"))
-cols[3].metric("Revisadas", statuses.count("Revisada"))
+total = sum(finding.alert_type == "alert" for finding in findings)
+reviewed = sum(status == "Revisada" for status in st.session_state.review_status.values())
+one, two, three = st.columns(3)
+one.metric("Registros demonstrados", len(movements))
+two.metric("Ocorrências sinalizadas", total)
+three.metric("Revisadas", reviewed)
 
-st.subheader("Registros analisados")
-for item in movements:
-    item_findings = grouped.get(item.id, [])
-    origin_label = f"Simulado (fixture: {item.source})" if is_demo else str(item.source)
-    label = f"{item.id} · {origin_label} · {item.description or 'Descrição ausente'}"
-    with st.expander(label, expanded=bool(item_findings)):
-        st.write(f"**Descrição:** {item.description or 'não informada'}")
-        st.write(f"**Preço unitário:** {('R$ ' + format(item.unit_price, '.2f')) if item.unit_price is not None else 'indisponível'} · **Quantidade/unidade:** {item.quantity or '—'} {item.unit or ''}")
-        st.write(f"**Data:** {item.event_date or 'não informada'} · **Origem:** {origin_label}")
-        st.write(f"**Órgão:** {item.buyer_name or 'não informado'} · **Fornecedor:** {item.supplier_name or 'não informado'} · **Município:** {item.municipality or 'não informado'}")
-        if item.source_url:
-            st.markdown(f"[Consultar fonte oficial]({item.source_url})")
-        for finding in item_findings:
-            display = (
-                st.info
-                if finding.alert_type == "insufficient_evidence"
-                else st.warning
-            )
+st.subheader("Ocorrências para revisão")
+for movement_id, record_findings in grouped.items():
+    item = by_id.get(movement_id)
+    if item is None:
+        st.info("Registro sem identificador rastreável")
+        for finding in record_findings:
+            display = st.info if finding.alert_type == "insufficient_evidence" else st.warning
             display(f"**{finding.rule}** — {finding.explanation}")
-            key = f"{item.id}|{finding.rule}"
-            st.radio("Revisão desta ocorrência (estado apenas nesta sessão)", ["Pendente", "Revisada"], key=f"review-{key}", index=1 if st.session_state.review_status.get(key) == "Revisada" else 0, horizontal=True, on_change=lambda k=key: st.session_state.review_status.__setitem__(k, st.session_state[f"review-{k}"]))
+        continue
+    with st.expander(f"{movement_id} · {item.source} · {item.description or 'Descrição ausente'}", expanded=True):
+        for finding in record_findings:
+            display = st.info if finding.alert_type == "insufficient_evidence" else st.warning
+            display(f"**{finding.rule}** — {finding.explanation}")
+        c1, c2, c3 = st.columns(3)
+        c1.write(f"Valor: R$ {item.total_value or 0:.2f}")
+        c2.write(f"Fornecedor: {item.supplier_name or 'não informado'}")
+        status = c3.radio("Status", ["Pendente", "Revisada"], key=f"status-{movement_id}", horizontal=True)
+        st.session_state.review_status[movement_id] = status
 
-st.subheader("Relatório cidadão")
-if not movements:
-    st.caption("Carregue ou selecione registros para preparar um relatório.")
-else:
-    choices = [f"{item.id} — {item.description or 'Descrição ausente'}" for item in movements]
-    selected = st.selectbox("Movimentação", choices)
-    item = movements[choices.index(selected)]
-    selected_findings = grouped.get(item.id, [])
-    observations = st.text_area("Observações complementares do cidadão")
-    report = build_report(item, selected_findings, observations=observations, simulated=is_demo)
-    st.markdown(report["text"])
-    st.download_button("Gerar relatório", data=export_pdf(report), file_name=f"relatorio-{item.id.replace(':', '-')}.pdf", mime="application/pdf")
-
-st.caption("Demonstração simulada usa exclusivamente registros fictícios. Estado de revisão não é salvo permanentemente.")
+st.subheader("Como os dados se complementam")
+st.markdown("PNCP: contratação e itens · Compras.gov.br: CATMAT e preços praticados · Portal da Transparência: convênios, recursos e execução. A integração em tempo real requer filtros e, para Transparência, chave de API.")

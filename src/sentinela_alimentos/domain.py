@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 
 class Source(StrEnum):
@@ -46,6 +47,6 @@ class Finding:
     severity: str
     rule_id: str = ""
     alert_type: str = "alert"
-    criteria: dict = field(default_factory=dict)
-    evidence: dict = field(default_factory=dict)
+    criteria: dict[str, Any] = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
     limitations: list[str] = field(default_factory=list)
