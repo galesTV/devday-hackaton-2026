@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 
 class Source(StrEnum):
@@ -33,6 +34,7 @@ class FoodMovement:
     unit: str | None
     unit_price: Decimal | None
     total_value: Decimal | None
+    municipality_code: str | None = None
     source_url: str | None = None
     raw: dict = field(default_factory=dict, compare=False)
 
@@ -43,3 +45,8 @@ class Finding:
     rule: str
     explanation: str
     severity: str
+    rule_id: str = ""
+    alert_type: str = "alert"
+    criteria: dict[str, Any] = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
+    limitations: list[str] = field(default_factory=list)
