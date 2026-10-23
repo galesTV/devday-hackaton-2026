@@ -7,6 +7,7 @@ from sentinela_alimentos.collection import collect_food_data
 from sentinela_alimentos.demo_data import sample_movements
 from sentinela_alimentos.reports import build_report, export_pdf
 from sentinela_alimentos.rules import find_regional_price_discrepancies, run_all_rules
+from sentinela_alimentos.session_state import public_movements, save_public_result
 
 st.set_page_config(page_title="Sentinela Alimentos", page_icon="🌾", layout="wide")
 st.title("🌾 Sentinela Alimentos")
@@ -22,7 +23,7 @@ if "live_search_completed" not in st.session_state:
 mode = st.sidebar.radio("Dados", ["Demonstração simulada", "Consultar fontes oficiais"])
 is_demo = mode == "Demonstração simulada"
 result = st.session_state.live_result
-movements = sample_movements() if is_demo else (result.movements if result else [])
+movements = sample_movements() if is_demo else public_movements(st.session_state)
 if is_demo:
     st.info("Demonstração simulada — estes registros são fictícios e não representam compras oficiais.")
 
@@ -40,11 +41,9 @@ if mode == "Consultar fontes oficiais":
     start = st.sidebar.date_input("Data inicial", value=date.today() - timedelta(days=30))
     end = st.sidebar.date_input("Data final", value=date.today())
     if st.sidebar.button("Buscar dados públicos", type="primary"):
-        st.session_state.live_result = collect_food_data(
+        save_public_result(st.session_state, collect_food_data(
             product, start, end, None if state == "Todas" else state
-        )
-        st.session_state.review_status = {}
-        st.session_state.live_search_completed = True
+        ))
         st.rerun()
     result = st.session_state.live_result
     movements = result.movements if result else []

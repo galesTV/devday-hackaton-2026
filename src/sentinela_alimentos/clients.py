@@ -1,5 +1,6 @@
 """Conectores mínimos: cada resposta é preservada e depois normalizada."""
 
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -12,7 +13,20 @@ class PublicApiClient:
         self.client = httpx.Client(base_url=base_url, timeout=30, headers=headers)
 
     def get_list(self, endpoint: str, params: Mapping[str, str | int] | None = None) -> list[dict[str, Any]]:
-        response = self.client.get(endpoint, params=params)
+        response: httpx.Response | None = None
+        for attempt in range(3):
+            response = self.client.get(endpoint, params=params)
+            retryable = response.status_code == 429 or response.status_code >= 500
+            if not retryable or attempt == 2:
+                break
+            retry_after = response.headers.get("Retry-After")
+            try:
+                delay = float(retry_after) if retry_after else 0.5 * (2**attempt)
+            except ValueError:
+                delay = 0.5 * (2**attempt)
+            time.sleep(min(delay, 8.0))
+
+        assert response is not None
         response.raise_for_status()
         payload = response.json()
         if isinstance(payload, list):

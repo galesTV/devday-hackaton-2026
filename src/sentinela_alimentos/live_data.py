@@ -241,7 +241,8 @@ def compras_regional_market_prices(
                         unit=record.get("unidadeFornecimento"),
                         unit_price=price,
                         total_value=decimal(record.get("valorTotal")),
-                        municipality_code=str(record.get("codigoMunicipio") or municipality_code or "") or None,
+                        # Do not label a state fallback as a municipality reference.
+                        municipality_code=str(record.get("codigoMunicipio") or "") or None,
                         source_url="https://dadosabertos.compras.gov.br/swagger-ui/index.html",
                         raw={"catalog": catalog_item, "price": record},
                     )
