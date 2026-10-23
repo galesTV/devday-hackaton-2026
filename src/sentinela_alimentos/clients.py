@@ -31,8 +31,27 @@ class PNCPClient(PublicApiClient):
     def __init__(self) -> None:
         super().__init__("https://pncp.gov.br/api/consulta")
 
-    def publications(self, start: str, end: str, modality: int = 6) -> list[dict[str, Any]]:
-        return self.get_list("/v1/contratacoes/publicacao", {"dataInicial": start.replace("-", ""), "dataFinal": end.replace("-", ""), "codigoModalidadeContratacao": modality, "pagina": 1, "tamanhoPagina": 50})
+    def publications(
+        self, start: str, end: str, modality: int = 6, page: int = 1
+    ) -> list[dict[str, Any]]:
+        return self.get_list(
+            "/v1/contratacoes/publicacao",
+            {
+                "dataInicial": start.replace("-", ""),
+                "dataFinal": end.replace("-", ""),
+                "codigoModalidadeContratacao": modality,
+                "pagina": page,
+                "tamanhoPagina": 50,
+            },
+        )
+
+    def purchase_items(
+        self, cnpj: str, year: int, sequence: int
+    ) -> list[dict[str, Any]]:
+        return self.get_list(
+            f"/v1/orgaos/{cnpj}/compras/{year}/{sequence}/itens",
+            {"pagina": 1, "tamanhoPagina": 50},
+        )
 
 
 class ComprasGovClient(PublicApiClient):
@@ -41,6 +60,33 @@ class ComprasGovClient(PublicApiClient):
 
     def practiced_material_prices(self, params: Mapping[str, str | int]) -> list[dict[str, Any]]:
         return self.get_list("/modulo-pesquisa-preco/1_consultarMaterial", params)
+
+    def food_catalog(
+        self, page: int = 1, class_code: int | None = None
+    ) -> list[dict[str, Any]]:
+        """CATMAT group 89 is the official group named 'Subsistência'."""
+        params: dict[str, str | int] = {
+            "pagina": page,
+            "tamanhoPagina": 500,
+            "codigoGrupo": 89,
+            "statusItem": "true",
+        }
+        if class_code:
+            params["codigoClasse"] = class_code
+        return self.get_list(
+            "/modulo-material/4_consultarItemMaterial",
+            params,
+        )
+
+    def prices_for_catalog_item(self, catalog_item_code: int) -> list[dict[str, Any]]:
+        return self.practiced_material_prices(
+            {
+                "pagina": 1,
+                "tamanhoPagina": 50,
+                "tipo": "codigoItemCatalogo",
+                "codigo": catalog_item_code,
+            }
+        )
 
 
 class TransparencyClient(PublicApiClient):

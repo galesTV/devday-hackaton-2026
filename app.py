@@ -1,8 +1,15 @@
 from collections import defaultdict
+from datetime import date, timedelta
 
+import httpx
 import streamlit as st
 
 from sentinela_alimentos.demo_data import sample_movements
+from sentinela_alimentos.live_data import (
+    compras_food_catalog,
+    pncp_food_movements,
+    transparency_food_agreements,
+)
 from sentinela_alimentos.rules import run_all_rules
 
 st.set_page_config(page_title="Sentinela Alimentos", page_icon="🌾", layout="wide")
@@ -12,7 +19,32 @@ st.caption("Conferência explicável de compras públicas de alimentos — um si
 if "review_status" not in st.session_state:
     st.session_state.review_status = {}
 
+mode = st.sidebar.radio("Dados", ["Demonstração reproduzível", "Consultar APIs oficiais"])
 movements = sample_movements()
+if mode == "Consultar APIs oficiais":
+    st.sidebar.caption("PNCP e Compras.gov.br são públicos. O Portal da Transparência requer `TRANSPARENCIA_API_KEY`.")
+    product = st.sidebar.text_input("Produto alimentar", value="arroz")
+    start = st.sidebar.date_input("Data inicial", value=date.today() - timedelta(days=30))
+    end = st.sidebar.date_input("Data final", value=date.today())
+    if st.sidebar.button("Buscar dados públicos", type="primary"):
+        with st.spinner("Consultando fontes oficiais..."):
+            errors: list[str] = []
+            movements = []
+            for source_name, collector, arguments in [
+                ("PNCP", pncp_food_movements, (start, end)),
+                ("Compras.gov.br", compras_food_catalog, (product,)),
+                ("Portal da Transparência", transparency_food_agreements, (start, end)),
+            ]:
+                try:
+                    movements.extend(collector(*arguments))
+                except (httpx.HTTPError, KeyError, ValueError) as exc:
+                    errors.append(f"{source_name}: {exc}")
+            for error in errors:
+                st.warning(error)
+            if not movements:
+                st.info("Nenhum registro alimentar encontrado para estes filtros. Tente um período ou produto diferente.")
+    else:
+        st.info("Defina os filtros e clique em “Buscar dados públicos”.")
 by_id = {item.id: item for item in movements}
 findings = run_all_rules(movements)
 grouped = defaultdict(list)
