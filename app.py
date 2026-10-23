@@ -1,13 +1,17 @@
 from collections import defaultdict
 from datetime import date, timedelta
+from hashlib import sha256
+import json
 from pathlib import Path
 
 import streamlit as st
 
+from sentinela_alimentos.ai_service import AIServiceError, analyze_records, build_factual_context
+from sentinela_alimentos.ai_service import is_configured as ai_is_configured
 from sentinela_alimentos.collection import collect_food_data
 from sentinela_alimentos.demo_data import sample_movements
 from sentinela_alimentos.reports import build_report, export_pdf
-from sentinela_alimentos.rules import find_regional_price_discrepancies, run_all_rules
+from sentinela_alimentos.rules import run_all_rules
 from sentinela_alimentos.session_state import public_movements, save_public_result
 
 st.set_page_config(page_title="Sentinela Alimentos", page_icon="🌿", layout="wide")
@@ -20,11 +24,17 @@ if "live_result" not in st.session_state:
     st.session_state.live_result = None
 if "live_search_completed" not in st.session_state:
     st.session_state.live_search_completed = False
+if "ai_cache" not in st.session_state:
+    st.session_state.ai_cache = {}
+if "ai_chat_history" not in st.session_state:
+    st.session_state.ai_chat_history = {}
+if "ai_report_summaries" not in st.session_state:
+    st.session_state.ai_report_summaries = {}
 
 with st.sidebar:
     st.markdown('<div class="brand-mark">🌿</div><div class="brand-name">Sentinela<br>Alimentos</div>', unsafe_allow_html=True)
     st.caption("TRANSPARÊNCIA · ALIMENTAÇÃO PÚBLICA")
-    page = st.radio("Navegação", ["Início", "Compras públicas", "Ocorrências", "Relatórios", "Sobre e fontes"], label_visibility="collapsed", key="page_navigation")
+    page = st.radio("Navegação", ["Início", "Compras públicas", "Ocorrências", "Relatórios", "Análise com IA", "Sobre e fontes"], label_visibility="collapsed", key="page_navigation")
     st.markdown("<div class='side-divider'></div>", unsafe_allow_html=True)
     mode = st.radio("Origem dos dados", ["Demonstração simulada", "Fonte oficial"], help="A demonstração usa registros fictícios. A consulta oficial acessa APIs públicas.")
     is_demo = mode == "Demonstração simulada"
@@ -47,17 +57,33 @@ if not is_demo:
     movements = result.movements if result else []
 
 findings = run_all_rules(movements)
-findings += find_regional_price_discrepancies(
-    [item for item in movements if item.source == "PNCP"],
-    [item for item in movements if item.source == "Compras.gov.br" and item.unit_price],
-)
 grouped = defaultdict(list)
 for finding in findings:
     grouped[finding.movement_id].append(finding)
 by_id = {item.id: item for item in movements if item.id}
 alert_total = sum(f.alert_type == "alert" for f in findings)
-reviewed = sum(value in ("Revisado", "Revisada") for value in st.session_state.review_status.values())
 source_count = len({str(item.source) for item in movements})
+
+
+def status_key(item_id: str, source: str) -> str:
+    return f"{source}:{item_id}"
+
+
+def occurrence_status(item_id: str, source: str) -> str:
+    key = status_key(item_id, source)
+    status = st.session_state.get(f"status-{key}")
+    if status not in {"Para revisar", "Revisado", "Revisada", "Sem dados suficientes"}:
+        status = st.session_state.review_status.get(key, "Para revisar")
+    st.session_state.review_status[key] = status
+    return status
+
+
+reviewed = sum(
+    occurrence_status(item.id, str(item.source)) in {"Revisado", "Revisada"}
+    for item in movements
+    if item.id
+)
+
 
 def header(eyebrow, title, desc=""):
     st.markdown(f"<div class='eyebrow'>{eyebrow}</div><h1 class='page-title'>{title}</h1>{f'<p class=\"page-deck\">{desc}</p>' if desc else ''}", unsafe_allow_html=True)
@@ -112,15 +138,15 @@ def occurrence_card(movement_id):
         cols[0].metric("Preço unitário", f"R$ {item.unit_price:.2f}" if item.unit_price is not None else "Indisponível")
         cols[1].metric("Quantidade", f"{item.quantity} {item.unit or ''}" if item.quantity is not None else "Indisponível")
         cols[2].metric("Valor total", f"R$ {item.total_value:.2f}" if item.total_value is not None else "Indisponível")
-        status_key = f"{item.source}:{item.id}"
-        current = st.session_state.review_status.get(status_key, "Para revisar")
-        new_status = cols[3].selectbox("Status", ["Para revisar", "Revisado", "Sem dados suficientes"], index=["Para revisar", "Revisado", "Sem dados suficientes"].index(current) if current in ["Para revisar", "Revisado", "Sem dados suficientes"] else 0, key=f"status-{status_key}")
-        st.session_state.review_status[status_key] = new_status
+        review_key = status_key(item.id, str(item.source))
+        current = occurrence_status(item.id, str(item.source))
+        new_status = cols[3].selectbox("Status", ["Para revisar", "Revisado", "Sem dados suficientes"], index=["Para revisar", "Revisado", "Sem dados suficientes"].index(current) if current in ["Para revisar", "Revisado", "Sem dados suficientes"] else 0, key=f"status-{review_key}")
+        st.session_state.review_status[review_key] = new_status
         actions = st.columns([1, 1, 3])
         if item.source_url:
             actions[0].link_button("Abrir fonte ↗", item.source_url, use_container_width=True)
         report = build_report(item, record_findings, simulated=is_demo)
-        actions[1].download_button("PDF do registro", export_pdf(report), file_name=f"sentinela-{item.source}-{item.id}.pdf".replace("/", "-"), mime="application/pdf", key=f"report-{status_key}", use_container_width=True)
+        actions[1].download_button("PDF do registro", export_pdf(report), file_name=f"sentinela-{item.source}-{item.id}.pdf".replace("/", "-"), mime="application/pdf", key=f"report-{review_key}", use_container_width=True)
 
 if page == "Início":
     st.markdown("<div class='hero'><div class='hero-copy'><div class='eyebrow'>CONTROLE SOCIAL · COMPRAS PÚBLICAS</div><h1>O que você come também é uma questão pública.</h1><p>Acompanhe compras de alimentos, entenda os sinais e ajude a fortalecer a transparência na alimentação pública.</p><span class='hero-note'>🌱 Dados públicos, explicações claras e revisão humana.</span></div><div class='hero-art'>✳<span>◌</span>❋</div></div>", unsafe_allow_html=True)
@@ -168,19 +194,36 @@ elif page == "Compras públicas":
 elif page == "Ocorrências":
     header("REVISÃO HUMANA", "Ocorrências", "Sinais explicáveis para apoiar a conferência dos registros.")
     mode_note()
-    categories = {"Duplicidade": [], "Preço atípico": [], "Dados ausentes": []}
-    for movement_id, rows in grouped.items():
-        labels = " ".join(f.rule_id for f in rows)
-        bucket = "Duplicidade" if "duplicate" in labels else "Preço atípico" if "price" in labels else "Dados ausentes"
-        categories[bucket].append(movement_id)
-    tabs = st.tabs([f"{name}  ·  {len(ids)}" for name, ids in categories.items()])
-    for tab, ids in zip(tabs, categories.values()):
+    pending_ids = []
+    reviewed_ids = []
+    for movement_id in grouped:
+        item = by_id.get(movement_id)
+        status = occurrence_status(movement_id, str(item.source)) if item else "Para revisar"
+        if status in {"Revisado", "Revisada"}:
+            reviewed_ids.append(movement_id)
+        else:
+            pending_ids.append(movement_id)
+
+    pending_tab, reviewed_tab = st.tabs(
+        [f"Para revisar · {len(pending_ids)}", f"Revisadas · {len(reviewed_ids)}"]
+    )
+    for tab, movement_ids in [(pending_tab, pending_ids), (reviewed_tab, reviewed_ids)]:
         with tab:
-            if ids:
-                for movement_id in ids:
-                    occurrence_card(movement_id)
-            else:
-                st.markdown("<div class='empty-state'>✿<br><b>Nada para revisar nesta categoria</b></div>", unsafe_allow_html=True)
+            categories = {"Duplicidade": [], "Preço atípico": [], "Dados ausentes": []}
+            for movement_id in movement_ids:
+                labels = " ".join(f.rule_id for f in grouped[movement_id])
+                bucket = "Duplicidade" if "duplicate" in labels else "Preço atípico" if "price" in labels else "Dados ausentes"
+                categories[bucket].append(movement_id)
+            category_tabs = st.tabs(
+                [f"{name} · {len(ids)}" for name, ids in categories.items()]
+            )
+            for category_tab, ids in zip(category_tabs, categories.values()):
+                with category_tab:
+                    if ids:
+                        for movement_id in ids:
+                            occurrence_card(movement_id)
+                    else:
+                        st.markdown("<div class='empty-state'>✿<br><b>Nada para revisar nesta categoria</b></div>", unsafe_allow_html=True)
 elif page == "Relatórios":
     header("PRESTAÇÃO DE CONTAS", "Relatórios", "Resumos exportáveis dos registros e sinais exibidos no painel.")
     mode_note()
