@@ -19,7 +19,7 @@ grouped = defaultdict(list)
 for finding in findings:
     grouped[finding.movement_id].append(finding)
 
-total = len(grouped)
+total = sum(finding.alert_type == "alert" for finding in findings)
 reviewed = sum(status == "Revisada" for status in st.session_state.review_status.values())
 one, two, three = st.columns(3)
 one.metric("Registros demonstrados", len(movements))
@@ -31,7 +31,8 @@ for movement_id, record_findings in grouped.items():
     item = by_id[movement_id]
     with st.expander(f"{movement_id} · {item.source} · {item.description or 'Descrição ausente'}", expanded=True):
         for finding in record_findings:
-            st.warning(f"**{finding.rule}** — {finding.explanation}")
+            display = st.info if finding.alert_type == "insufficient_evidence" else st.warning
+            display(f"**{finding.rule}** — {finding.explanation}")
         c1, c2, c3 = st.columns(3)
         c1.write(f"Valor: R$ {item.total_value or 0:.2f}")
         c2.write(f"Fornecedor: {item.supplier_name or 'não informado'}")

@@ -43,3 +43,8 @@ class Finding:
     rule: str
     explanation: str
     severity: str
+    rule_id: str = ""
+    alert_type: str = "alert"
+    criteria: dict = field(default_factory=dict)
+    evidence: dict = field(default_factory=dict)
+    limitations: list[str] = field(default_factory=list)
