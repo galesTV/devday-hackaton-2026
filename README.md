@@ -16,6 +16,18 @@ Na barra lateral, selecione **Consultar APIs oficiais**. O sistema busca:
 - **Compras.gov.br**: itens CATMAT do grupo **89 — Subsistência**, que inclui carnes, hortifrúti, cereais e laticínios. A busca por produto é feita nas descrições do catálogo; o endpoint de preços praticados requer `tipo=codigoItemCatalogo` ou `codigoPdm`.
 - **Portal da Transparência**: convênios no período, filtrados localmente pelo objeto. Defina `TRANSPARENCIA_API_KEY` antes de usar esta fonte, pois a API rejeita consultas sem chave.
 
+### Origem, rastreabilidade e qualidade
+
+| Fonte | Endpoints utilizados | Finalidade | Campos preservados |
+| --- | --- | --- | --- |
+| PNCP | `/v1/contratacoes/publicacao` e `/v1/orgaos/{cnpj}/compras/{ano}/{sequencial}/itens` | Contratações e itens alimentares | `numeroControlePNCP`, CNPJ, órgão, datas, município/UF, valores, fornecedor e link PNCP |
+| Compras.gov.br | `/modulo-material/4_consultarItemMaterial` e `/modulo-pesquisa-preco/1_consultarMaterial` | CATMAT grupo 89 e preços praticados regionais | Código CATMAT, data, órgão/UASG, fornecedor, município/UF, quantidade e preço unitário |
+| Portal da Transparência | `/api-de-dados/convenios` | Contexto de transferências e convênios ligados à alimentação | ID/número, convenente, órgão, vigência, município/UF e valor liberado/global |
+
+A coleta converte todas as respostas em `FoodMovement`, mantém o payload bruto em `raw`, isola falhas por fonte e remove repetições somente dentro da mesma origem/identificador. Registros de fontes diferentes nunca são mesclados. A detecção de duplicidade exibe um único grupo revisável, em vez de repetir um alerta para cada linha idêntica. A visualização limita a fila aos primeiros 100 registros únicos, mantendo o escopo da demonstração controlado.
+
+Em 23/10/2026, os testes manuais retornaram registros de gêneros alimentícios no PNCP, itens CATMAT de arroz no Compras.gov.br e referências regionais de arroz para DF/Brasília. O Portal da Transparência respondeu à consulta autenticada; para convênios, a API limita consultas por período a um mês.
+
 ## Demonstração pronta
 
 O modo demonstrativo usa seis registros fictícios (abaixo do limite de 100) e cobre os três critérios do desafio:

@@ -15,6 +15,15 @@ def test_findings_are_explainable():
     assert all(finding.explanation for finding in findings)
 
 
+def test_duplicate_group_creates_a_single_reviewable_occurrence():
+    findings = [
+        finding
+        for finding in run_all_rules(sample_movements())
+        if finding.rule == "Possível duplicidade"
+    ]
+    assert len(findings) == 1
+
+
 def test_regional_comparison_uses_total_divided_by_quantity_when_needed():
     purchase, *_, reference = sample_movements()
     purchase = purchase.__class__(

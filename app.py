@@ -1,16 +1,10 @@
 from collections import defaultdict
 from datetime import date, timedelta
 
-import httpx
 import streamlit as st
 
+from sentinela_alimentos.collection import collect_food_data
 from sentinela_alimentos.demo_data import sample_movements
-from sentinela_alimentos.live_data import (
-    compras_food_catalog,
-    compras_regional_market_prices,
-    pncp_food_movements,
-    transparency_food_agreements,
-)
 from sentinela_alimentos.rules import (
     find_regional_price_discrepancies,
     run_all_rules,
@@ -32,33 +26,14 @@ if mode == "Consultar APIs oficiais":
     end = st.sidebar.date_input("Data final", value=date.today())
     if st.sidebar.button("Buscar dados públicos", type="primary"):
         with st.spinner("Consultando fontes oficiais..."):
-            errors: list[str] = []
-            movements = []
-            for source_name, collector, arguments in [
-                ("PNCP", pncp_food_movements, (start, end, product)),
-                ("Compras.gov.br", compras_food_catalog, (product,)),
-                ("Portal da Transparência", transparency_food_agreements, (start, end)),
-            ]:
-                try:
-                    movements.extend(collector(*arguments))
-                except (httpx.HTTPError, KeyError, ValueError) as exc:
-                    errors.append(f"{source_name}: {exc}")
-            for error in errors:
+            result = collect_food_data(product, start, end)
+            movements = result.movements
+            for error in result.errors:
                 st.warning(error)
-            pncp_purchases = [item for item in movements if item.source == "PNCP"]
-            market_prices = []
-            for state_code, municipality_code in {
-                (item.state, item.municipality_code) for item in pncp_purchases
-            }:
-                try:
-                    market_prices.extend(
-                        compras_regional_market_prices(
-                            product, state_code, municipality_code
-                        )
-                    )
-                except (httpx.HTTPError, KeyError, ValueError) as exc:
-                    st.warning(f"Referência regional Compras.gov.br: {exc}")
-            movements.extend(market_prices)
+            if result.duplicates_removed:
+                st.caption(f"{result.duplicates_removed} registro(s) repetido(s) removido(s) na coleta.")
+            if result.truncated:
+                st.caption("A visualização foi limitada aos primeiros 100 registros únicos.")
             if not movements:
                 st.info("Nenhum registro alimentar encontrado para estes filtros. Tente um período ou produto diferente.")
     else:

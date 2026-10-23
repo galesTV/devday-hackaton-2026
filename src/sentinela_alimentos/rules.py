@@ -28,8 +28,14 @@ def find_duplicate_movements(movements: list[FoodMovement]) -> list[Finding]:
     for group in groups.values():
         if len(group) > 1 and group[0].total_value is not None:
             ids = ", ".join(item.id for item in group)
-            for item in group:
-                findings.append(Finding(item.id, "Possível duplicidade", f"Mesmo item, fornecedor, valor e data que os registros: {ids}.", "alta"))
+            findings.append(
+                Finding(
+                    group[0].id,
+                    "Possível duplicidade",
+                    f"Grupo com {len(group)} registros de mesmo item, fornecedor, valor e data: {ids}.",
+                    "alta",
+                )
+            )
     return findings
 
 
