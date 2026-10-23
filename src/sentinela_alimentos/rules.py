@@ -16,6 +16,15 @@ def _same_optional(left: str | None, right: str | None) -> bool:
     return not left or not right or normalized_text(left) == normalized_text(right)
 
 
+def effective_unit_price(movement: FoodMovement) -> Decimal | None:
+    """Use the reported unit value or derive it safely from total ÷ quantity."""
+    if movement.unit_price is not None:
+        return movement.unit_price
+    if movement.total_value is not None and movement.quantity not in (None, Decimal(0)):
+        return movement.total_value / movement.quantity
+    return None
+
+
 def find_duplicate_movements(movements: list[FoodMovement]) -> list[Finding]:
     """Find repeated IDs and conservative near duplicates, retaining both IDs."""
     findings: list[Finding] = []
@@ -75,11 +84,12 @@ def find_outlier_prices(
     for item in movements:
         if not item.description or not item.unit or not item.category or not item.event_date:
             continue
-        if item.unit_price is None or not item.unit_price.is_finite() or item.unit_price <= 0:
+        item_price = effective_unit_price(item)
+        if item_price is None or not item_price.is_finite() or item_price <= 0:
             continue
         peers = [other for other in movements if other.id != item.id and other.description and other.unit and
-                 other.category and other.event_date and other.unit_price is not None and
-                 other.unit_price.is_finite() and other.unit_price > 0 and
+                 other.category and other.event_date and effective_unit_price(other) is not None and
+                 effective_unit_price(other).is_finite() and effective_unit_price(other) > 0 and
                  normalized_text(other.description) == normalized_text(item.description) and
                  normalized_text(other.category) == normalized_text(item.category) and
                  normalized_text(other.unit) == normalized_text(item.unit) and
@@ -96,19 +106,63 @@ def find_outlier_prices(
                 ["Sem amostra mínima não é possível avaliar atipicidade; isso não indica irregularidade."],
             ))
             continue
-        reference = Decimal(str(median([peer.unit_price for peer in peers])))
+        reference = Decimal(str(median([effective_unit_price(peer) for peer in peers])))
         threshold = reference * multiplier
-        if item.unit_price > threshold:
-            divergence = (item.unit_price - reference) / reference * Decimal(100)
+        if item_price > threshold:
+            divergence = (item_price - reference) / reference * Decimal(100)
             findings.append(Finding(
                 item.id, "Valor fora do critério",
                 f"Preço unitário excede {multiplier}× a mediana compatível; sinal para revisão, não prova de irregularidade.",
                 "média", "price_outlier", "alert", common,
-                {"price": str(item.unit_price), "reference_median": str(reference),
+                {"price": str(item_price), "reference_median": str(reference),
                  "threshold": str(threshold), "divergence_percent": str(divergence),
                  "reference_count": len(peers), "reference_ids": [p.id for p in peers],
                  "source_names": sorted({str(p.source) for p in peers})},
                 ["Comparação textual exata de descrição, categoria e unidade; não há conversão de unidade."],
+            ))
+    return findings
+
+
+def find_regional_price_discrepancies(
+    purchases: list[FoodMovement],
+    market_prices: list[FoodMovement],
+    multiplier: Decimal = Decimal("1.30"),
+) -> list[Finding]:
+    """Compare against public price samples from the same municipality, then UF."""
+    findings: list[Finding] = []
+    for purchase in purchases:
+        purchase_price = effective_unit_price(purchase)
+        if purchase_price is None or purchase_price <= 0:
+            continue
+        municipal = [
+            effective_unit_price(item)
+            for item in market_prices
+            if item.municipality_code == purchase.municipality_code
+            and item.municipality_code
+            and effective_unit_price(item) is not None
+        ]
+        state = [
+            effective_unit_price(item)
+            for item in market_prices
+            if item.state == purchase.state and effective_unit_price(item) is not None
+        ]
+        samples = municipal or state
+        if not samples:
+            continue
+        reference = Decimal(str(median(samples)))
+        if purchase_price > reference * multiplier:
+            scope = "município" if municipal else "UF"
+            findings.append(Finding(
+                purchase.id,
+                "Possível discrepância regional de preço",
+                "Preço unitário acima da referência regional; sinal para revisão, não prova de irregularidade.",
+                "alta",
+                "regional_price_discrepancy",
+                "alert",
+                {"multiplier": str(multiplier), "scope": scope},
+                {"price": str(purchase_price), "reference_median": str(reference),
+                 "reference_count": len(samples), "scope": scope},
+                ["Verifique especificação, frete, sazonalidade e quantidade antes de concluir qualquer irregularidade."],
             ))
     return findings
 
