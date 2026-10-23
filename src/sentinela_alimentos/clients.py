@@ -32,18 +32,23 @@ class PNCPClient(PublicApiClient):
         super().__init__("https://pncp.gov.br/api/consulta")
 
     def publications(
-        self, start: str, end: str, modality: int = 6, page: int = 1
+        self,
+        start: str,
+        end: str,
+        modality: int = 6,
+        page: int = 1,
+        state: str | None = None,
     ) -> list[dict[str, Any]]:
-        return self.get_list(
-            "/v1/contratacoes/publicacao",
-            {
-                "dataInicial": start.replace("-", ""),
-                "dataFinal": end.replace("-", ""),
-                "codigoModalidadeContratacao": modality,
-                "pagina": page,
-                "tamanhoPagina": 50,
-            },
-        )
+        params: dict[str, str | int] = {
+            "dataInicial": start.replace("-", ""),
+            "dataFinal": end.replace("-", ""),
+            "codigoModalidadeContratacao": modality,
+            "pagina": page,
+            "tamanhoPagina": 50,
+        }
+        if state:
+            params["uf"] = state
+        return self.get_list("/v1/contratacoes/publicacao", params)
 
     def purchase_items(
         self, cnpj: str, year: int, sequence: int

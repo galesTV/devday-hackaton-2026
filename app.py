@@ -16,28 +16,44 @@ st.caption("Conferência explicável de compras públicas de alimentos — um si
 
 if "review_status" not in st.session_state:
     st.session_state.review_status = {}
+if "public_result" not in st.session_state:
+    st.session_state.public_result = None
 
 mode = st.sidebar.radio("Dados", ["Demonstração reproduzível", "Consultar APIs oficiais"])
 movements = sample_movements()
 if mode == "Consultar APIs oficiais":
     st.sidebar.caption("PNCP e Compras.gov.br são públicos. O Portal da Transparência requer `TRANSPARENCIA_API_KEY`.")
     product = st.sidebar.text_input("Produto alimentar", value="arroz")
+    state = st.sidebar.selectbox(
+        "UF",
+        [
+            "Todas", "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
+            "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS",
+            "RO", "RR", "SC", "SP", "SE", "TO",
+        ],
+    )
     start = st.sidebar.date_input("Data inicial", value=date.today() - timedelta(days=30))
     end = st.sidebar.date_input("Data final", value=date.today())
     if st.sidebar.button("Buscar dados públicos", type="primary"):
         with st.spinner("Consultando fontes oficiais..."):
-            result = collect_food_data(product, start, end)
-            movements = result.movements
-            for error in result.errors:
-                st.warning(error)
-            if result.duplicates_removed:
-                st.caption(f"{result.duplicates_removed} registro(s) repetido(s) removido(s) na coleta.")
-            if result.truncated:
-                st.caption("A visualização foi limitada aos primeiros 100 registros únicos.")
-            if not movements:
-                st.info("Nenhum registro alimentar encontrado para estes filtros. Tente um período ou produto diferente.")
-    else:
+            st.session_state.public_result = collect_food_data(
+                product, start, end, None if state == "Todas" else state
+            )
+            st.session_state.review_status = {}
+    result = st.session_state.public_result
+    if result is None:
+        movements = []
         st.info("Defina os filtros e clique em “Buscar dados públicos”.")
+    else:
+        movements = result.movements
+        for error in result.errors:
+            st.warning(error)
+        if result.duplicates_removed:
+            st.caption(f"{result.duplicates_removed} registro(s) repetido(s) removido(s) na coleta.")
+        if result.truncated:
+            st.caption("A visualização foi limitada aos primeiros 100 registros únicos.")
+        if not movements:
+            st.info("Nenhum registro alimentar encontrado para estes filtros. Tente um período ou produto diferente.")
 by_id = {item.id: item for item in movements}
 findings = run_all_rules(movements)
 findings += find_regional_price_discrepancies(

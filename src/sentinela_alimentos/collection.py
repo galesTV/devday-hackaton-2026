@@ -53,14 +53,16 @@ def deduplicate_movements(movements: list[FoodMovement]) -> tuple[list[FoodMovem
     return unique, len(movements) - len(unique)
 
 
-def collect_food_data(product: str, start: date, end: date) -> CollectionResult:
+def collect_food_data(
+    product: str, start: date, end: date, state: str | None = None
+) -> CollectionResult:
     """Collect each official source independently so a source failure does not stop review."""
     records: list[FoodMovement] = []
     errors: list[str] = []
     for name, collector, arguments in [
-        ("PNCP", pncp_food_movements, (start, end, product)),
+        ("PNCP", pncp_food_movements, (start, end, product, state)),
         ("Compras.gov.br / CATMAT", compras_food_catalog, (product,)),
-        ("Portal da Transparência", transparency_food_agreements, (start, end)),
+        ("Portal da Transparência", transparency_food_agreements, (start, end, state)),
     ]:
         try:
             records.extend(collector(*arguments))
@@ -72,10 +74,12 @@ def collect_food_data(product: str, start: date, end: date) -> CollectionResult:
         for item in records
         if item.source is Source.PNCP
     }
-    for state, municipality_code in regions:
+    for region_state, municipality_code in regions:
         try:
             records.extend(
-                compras_regional_market_prices(product, state, municipality_code)
+                compras_regional_market_prices(
+                    product, region_state, municipality_code
+                )
             )
         except (httpx.HTTPError, KeyError, ValueError) as exc:
             errors.append(f"Compras.gov.br / referência regional: {exc}")

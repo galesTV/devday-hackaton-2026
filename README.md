@@ -16,6 +16,8 @@ Na barra lateral, selecione **Consultar APIs oficiais**. O sistema busca:
 - **Compras.gov.br**: itens CATMAT do grupo **89 — Subsistência**, que inclui carnes, hortifrúti, cereais e laticínios. A busca por produto é feita nas descrições do catálogo; o endpoint de preços praticados requer `tipo=codigoItemCatalogo` ou `codigoPdm`.
 - **Portal da Transparência**: convênios no período, filtrados localmente pelo objeto. Defina `TRANSPARENCIA_API_KEY` antes de usar esta fonte, pois a API rejeita consultas sem chave.
 
+Selecione uma **UF** para restringir PNCP e Portal da Transparência ao estado escolhido e usar essa localização como referência de preços no Compras.gov.br. O resultado da última busca pública é mantido durante a sessão: marcar uma ocorrência como revisada não executa a coleta novamente nem retorna ao dataset demonstrativo.
+
 ### Origem, rastreabilidade e qualidade
 
 | Fonte | Endpoints utilizados | Finalidade | Campos preservados |
