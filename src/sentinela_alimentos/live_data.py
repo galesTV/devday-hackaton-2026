@@ -63,14 +63,20 @@ def transparency_api_key() -> str:
 
 
 def pncp_food_movements(
-    start: date, end: date, query: str | None = None, max_purchases: int = 10
+    start: date,
+    end: date,
+    query: str | None = None,
+    state: str | None = None,
+    max_purchases: int = 10,
 ) -> list[FoodMovement]:
     """PNCP does not expose a keyword filter; filter publication objects locally."""
     client = PNCPClient()
     try:
         food_purchases: list[dict] = []
         for page in range(1, 6):
-            publications = client.publications(start.isoformat(), end.isoformat(), page=page)
+            publications = client.publications(
+                start.isoformat(), end.isoformat(), page=page, state=state
+            )
             food_purchases.extend(
                 record for record in publications if is_food(record.get("objetoCompra"))
             )
@@ -245,7 +251,9 @@ def compras_regional_market_prices(
         client.close()
 
 
-def transparency_food_agreements(start: date, end: date) -> list[FoodMovement]:
+def transparency_food_agreements(
+    start: date, end: date, state: str | None = None
+) -> list[FoodMovement]:
     """The API has no food term filter: retrieve a period and filter the object locally."""
     if (end - start).days > 31:
         raise ValueError(
@@ -253,13 +261,14 @@ def transparency_food_agreements(start: date, end: date) -> list[FoodMovement]:
         )
     client = TransparencyClient(transparency_api_key())
     try:
-        records = client.agreements(
-            {
-                "dataInicial": start.strftime("%d/%m/%Y"),
-                "dataFinal": end.strftime("%d/%m/%Y"),
-                "pagina": 1,
-            }
-        )
+        params: dict[str, str | int] = {
+            "dataInicial": start.strftime("%d/%m/%Y"),
+            "dataFinal": end.strftime("%d/%m/%Y"),
+            "pagina": 1,
+        }
+        if state:
+            params["uf"] = state
+        records = client.agreements(params)
         return [
             FoodMovement(
                 id=f"transparencia:{record.get('id') or record.get('numero')}",
