@@ -1,3 +1,5 @@
+# Instala o pacote local em src/, necessário no ambiente limpo do Streamlit Cloud.
+-e .
 streamlit>=1.40
 httpx>=0.27
 openai>=1.66.0
