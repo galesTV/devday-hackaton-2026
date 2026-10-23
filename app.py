@@ -24,7 +24,7 @@ if "live_search_completed" not in st.session_state:
 with st.sidebar:
     st.markdown('<div class="brand-mark">🌿</div><div class="brand-name">Sentinela<br>Alimentos</div>', unsafe_allow_html=True)
     st.caption("TRANSPARÊNCIA · ALIMENTAÇÃO PÚBLICA")
-    page = st.radio("Navegação", ["Início", "Compras públicas", "Ocorrências", "Relatórios", "Análise com IA", "Sobre e fontes"], label_visibility="collapsed", key="page_navigation")
+    page = st.radio("Navegação", ["Início", "Compras públicas", "Ocorrências", "Relatórios", "Sobre e fontes"], label_visibility="collapsed", key="page_navigation")
     st.markdown("<div class='side-divider'></div>", unsafe_allow_html=True)
     mode = st.radio("Origem dos dados", ["Demonstração simulada", "Fonte oficial"], help="A demonstração usa registros fictícios. A consulta oficial acessa APIs públicas.")
     is_demo = mode == "Demonstração simulada"
