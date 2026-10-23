@@ -69,4 +69,53 @@ h2, h3 { font-family: 'Fraunces', Georgia, serif !important; }
 [data-testid="stExpander"] { background: var(--surface); border: 1px solid var(--border); border-radius: 15px; }
 [data-testid="stAlert"] { border-radius: 14px; }
 input, textarea { border-radius: 11px !important; }
+
+/* O Streamlit pode manter as variáveis do tema escuro mesmo em uma superfície clara.
+   Estes seletores mantêm o contraste no conteúdo, sem alterar o menu e o hero escuros. */
+[data-testid="stMain"],
+[data-testid="stMain"] p,
+[data-testid="stMain"] li,
+[data-testid="stMain"] label,
+[data-testid="stMain"] [data-testid="stWidgetLabel"] p,
+[data-testid="stMain"] [data-testid="stMarkdownContainer"] {
+  color: var(--charcoal) !important;
+}
+[data-testid="stMain"] h1,
+[data-testid="stMain"] h2,
+[data-testid="stMain"] h3,
+[data-testid="stMain"] [data-testid="stExpander"] summary,
+[data-testid="stMain"] [data-testid="stTabs"] button {
+  color: var(--charcoal) !important;
+}
+[data-testid="stMain"] [data-testid="stAlert"],
+[data-testid="stMain"] [data-testid="stAlert"] * {
+  color: var(--charcoal) !important;
+}
+[data-testid="stMain"] input,
+[data-testid="stMain"] textarea,
+[data-testid="stMain"] [data-baseweb="select"] > div,
+[data-testid="stMain"] [data-baseweb="select"] * {
+  background-color: var(--surface) !important;
+  color: var(--charcoal) !important;
+}
+[data-testid="stMain"] .stButton > button:not([kind="primary"]),
+[data-testid="stMain"] .stDownloadButton > button,
+[data-testid="stMain"] [data-testid="stLinkButton"] a {
+  background: var(--surface) !important;
+  color: var(--forest) !important;
+}
+[data-testid="stMain"] .stButton > button[kind="primary"] {
+  background: var(--forest) !important;
+  color: #fffdf4 !important;
+}
+.hero h1,
+.hero p,
+.hero .eyebrow,
+.hero-note {
+  color: inherit !important;
+}
+.hero h1 { color: var(--paper) !important; }
+.hero p { color: #e6ebdf !important; }
+.hero .eyebrow { color: var(--corn) !important; }
+.hero-note { color: var(--pistachio) !important; }
 @media (max-width: 750px) { .hero { min-height: 320px; padding: 2rem 1.5rem; } .hero-art { right: -10%; opacity: .6; font-size: 10rem; } }
